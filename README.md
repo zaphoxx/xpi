@@ -1,4 +1,4 @@
-# xpi
+# xpi (discontinued)
 xpi - tool for xpath injection (very rudimentary and basic) to extract the password.
 
 \xpi-master>python xpi.py --help
